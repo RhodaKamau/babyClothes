@@ -1,6 +1,6 @@
 from django.db import models
 
-class User(models.Model):
+class Person(models.Model):
     user_name = models.CharField(max_length = 64)
     email = models.EmailField(max_length = 64)
     password = models.CharField(max_length = 64)
@@ -30,12 +30,11 @@ class Product(models.Model):
         return self.name
 
 class Customer(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    phone = models.CharField(max_length=20, blank=True, null=True)
-    address = models.TextField(blank=True, null=True)
+    user = models.OneToOneField(Person, on_delete=models.CASCADE)
+
 
     def __str__(self):
-        return self.user.username
+        return self.user.user_name
 
 class Order(models.Model):
     customer = models.ForeignKey(Customer, related_name='orders', on_delete=models.CASCADE)
@@ -49,7 +48,7 @@ class Order(models.Model):
     ))
 
     def __str__(self):
-        return f'Order {self.id} by {self.customer.user.username}'
+        return f'Order {self.id} by {self.customer.user.user_name}'
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
@@ -85,5 +84,22 @@ class CartItem(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def save(self, adjusting_quantity=False, *args, **kwargs):
+        if adjusting_quantity:
+            if not self.pk:
+                self.product.stock -= self.quantity
+                if self.product.stock <= 0:
+                    self.product.available = False
+                self.product.save()
+
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f'{self.product.name} ({self.quantity}) in cart of {self.cart.customer.user.username}'
+
+    def delete(self, *args, **kwargs):
+        self.product.stock += self.quantity
+        if self.product.stock > 0:
+            self.product.available = True
+        self.product.save()
+        super().delete(*args, **kwargs)
